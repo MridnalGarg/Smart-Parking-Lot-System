@@ -24,6 +24,9 @@ import java.util.Optional;
 public class ParkingService {
 
     @Autowired
+    private LockService lockService;
+
+    @Autowired
     private ParkingLotRepository parkingLotRepository;
 
     @Autowired
@@ -37,6 +40,15 @@ public class ParkingService {
 
     @Transactional
     public Ticket checkIn(String regNumber, VehicleType type) {
+        String lockKey = "vehicle:" + regNumber;
+        try {
+            lockService.lock(lockKey);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for lock");
+        }
+
+        try {
 
         // Fetch the vehicle if it exists
         Optional<Vehicle> existingVehicle = vehicleRepository.findByRegNumber(regNumber);
@@ -76,12 +88,23 @@ public class ParkingService {
         ticket.setStatus(TicketStatus.ACTIVE);
 
         return ticketRepository.save(ticket);
+        } finally {
+            lockService.unlock(lockKey);
+        }
     }
 
     @Transactional
     public Ticket checkOut(String regNumber){
+        String lockKey = "vehicle:" + regNumber;
+        try {
+            lockService.lock(lockKey);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for lock");
+        }
 
-        Ticket ticket = ticketRepository.findByVehicleRegNumberAndStatus(regNumber, TicketStatus.ACTIVE)
+        try {
+            Ticket ticket = ticketRepository.findByVehicleRegNumberAndStatus(regNumber, TicketStatus.ACTIVE)
                 .orElseThrow(() -> new TicketNotFoundException("Active ticket not found for vehicle: " + regNumber));
 
         LocalDateTime checkOutTime = LocalDateTime.now();
@@ -99,6 +122,9 @@ public class ParkingService {
 
         ticket.setStatus(TicketStatus.COMPLETED);
         return ticketRepository.save(ticket);
+        } finally {
+            lockService.unlock(lockKey);
+        }
     }
 
 
